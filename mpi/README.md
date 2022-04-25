@@ -17,3 +17,7 @@ Pictures of 3 interesting rule outputs
 ![Alt-текст](110.jpg)
 
 ![Alt-текст](161.jpg)
+
+Speedup Graph for **array size 1.000.000** and **500 iterations**.
+
+![Alt-текст](speedup.png)
