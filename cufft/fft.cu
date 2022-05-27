@@ -78,7 +78,7 @@ __global__ void inplace_fft_outer(f2complex *__restrict__ A, int len, int n, int
     }
 }
 
-void cufft(vector<fcomplex> &a, bool invert, int balance = 10, int threads = 32) {
+int cufft(vector<fcomplex> &a, bool invert, int balance = 10, int threads = 32) {
 
     int n = (int)a.size();
     int data_size = n * sizeof(f2complex);
@@ -94,6 +94,7 @@ void cufft(vector<fcomplex> &a, bool invert, int balance = 10, int threads = 32)
     cudaMalloc((void **)&dn, data_size);
     cudaMemcpy(dn, data_array, data_size, cudaMemcpyHostToDevice);
 
+    auto start = high_resolution_clock::now();
     int s = log2(n);
 
     bitrev_reorder<<<ceil(float(n) / threads), threads>>>(A, dn, s, threads, n);
@@ -115,6 +116,8 @@ void cufft(vector<fcomplex> &a, bool invert, int balance = 10, int threads = 32)
     if (invert)
         inplace_divide_invert<<<ceil(n * 1.00 / threads), threads>>>(A, n, threads);
 
+    auto stop = high_resolution_clock::now(); 
+    auto duration = duration_cast<microseconds>(stop - start); 
 
     f2complex *result;
     result = (f2complex *)malloc(data_size);
@@ -128,11 +131,11 @@ void cufft(vector<fcomplex> &a, bool invert, int balance = 10, int threads = 32)
     free(data_array);
     cudaFree(A);
     cudaFree(dn);
-    return;
+    return duration.count();
 }
 
 /// Function to multiply two polynomial with cuda
-vector<int> cumult(vector<int> a, vector<int> b, int balance, int threads)
+vector<int> cumult(vector<int> a, vector<int> b, int balance, int threads, int&d)
 {
     vector<fcomplex> fa(a.begin(), a.end()), fb(b.begin(), b.end());
 
@@ -144,21 +147,26 @@ vector<int> cumult(vector<int> a, vector<int> b, int balance, int threads)
 
     fa.resize(n), fb.resize(n);
 
-    cufft(fa, false, balance, threads), cufft(fb, false, balance, threads);
+    auto d1 = cufft(fa, false, balance, threads);
+    auto d2 = cufft(fb, false, balance, threads);
 
+    auto start = high_resolution_clock::now();
     for (size_t i = 0; i < n; ++i)
         fa[i] *= fb[i];
+    
+    auto stop = high_resolution_clock::now(); 
+    auto duration = duration_cast<microseconds>(stop - start); 
 
-    cufft(fa, true, balance, threads);
+    auto d3 = cufft(fa, true, balance, threads);
 
     vector<int> res;
     res.resize(n);
     for (size_t i = 0; i < n; ++i)
         res[i] = int(fa[i].real() + 0.5);
 
+    d = d1 + d2 + d3 + duration.count();
     return res;
 }
-
 
 #define N 1000
 #define BALANCE 2
@@ -173,22 +181,19 @@ int main()
     auto multiplier = FFT();
     for(int threads = 1; threads <= 1024; threads++){
 
-        auto start = high_resolution_clock::now(); 
-
+        int d;
         // cuda
-        auto result_parallel = cumult(fa, fb, BALANCE, threads);
+        auto result_parallel = cumult(fa, fb, BALANCE, threads, d);
 
-        auto stop = high_resolution_clock::now(); 
-        auto duration = duration_cast<microseconds>(stop - start); 
       
-        cout << threads << " " << duration.count() << " ";
+        cout << threads << " " << d << " ";
 
-        start = high_resolution_clock::now(); 
+        auto start = high_resolution_clock::now(); 
         // sequential
         auto result_sequential = multiplier.mult(fa, fb);
 
-        stop = high_resolution_clock::now(); 
-        duration = duration_cast<microseconds>(stop - start); 
+        auto stop = high_resolution_clock::now(); 
+        auto duration = duration_cast<microseconds>(stop - start); 
 
         cout << duration.count() << endl;
        
