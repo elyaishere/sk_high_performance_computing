@@ -1,4 +1,4 @@
-# CUfft final project
+# Fast Fourier Transform for GPU
 ### usage
 1. Replace body of `main` in `fft.cu` with your example.
 e.g.
